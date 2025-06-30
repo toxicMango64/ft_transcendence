@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",                      // Modern JS output
+    "useDefineForClassFields": true,        // Align with ECMAScript spec
+    "lib": ["DOM", "DOM.Iterable", "ESNext"], 
+    "allowJs": false,
+    "skipLibCheck": true,                    // Speed up builds by skipping lib type checks
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,                          // Enable all strict type-checking options
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,                          // No output since Vite handles it
+    "jsx": "react-jsx"                       // React 17+ JSX transform
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
