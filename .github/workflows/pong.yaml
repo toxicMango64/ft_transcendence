@@ -1,0 +1,91 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with: { node-version: 18 }
+      - name: Lint Frontend
+        run: cd frontend && npm install && npm run lint
+      - name: Lint Backend (PHP)
+        run: cd backend && composer install && ./vendor/bin/phpcs src
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with: { node-version: 18 }
+      - name: Frontend Unit Tests
+        run: cd frontend && npm install && npm test
+      - name: Frontend E2E Tests
+        run: cd frontend && npm run cypress:run
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with: { php-version: 8.1 }
+      - name: Backend Tests
+        run: cd backend && composer install && ./vendor/bin/phpunit tests
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v3
+      - name: Dependency Check
+        uses: dependency-check/dependency-check-action@v0.26.0
+        with:
+          path: .
+          format: HTML
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v3
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: gitleaks.toml
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, dependency-check, secret-scan]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker Images
+        run: docker-compose build
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Staging
+        env:
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+        run: |
+          docker-compose up -d
+          curl -H "X-Vault-Token: $VAULT_TOKEN" -X POST http://vault:8200/v1/secret/data/pong-app -d '{"data":{"JWT_SECRET":"${{ secrets.JWT_SECRET }}","GOOGLE_CLIENT_ID":"${{ secrets.GOOGLE_CLIENT_ID }}"}}'
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Manual Production Deployment
+        env:
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+        run: |
+          docker-compose -f docker-compose.prod.yml up -d
